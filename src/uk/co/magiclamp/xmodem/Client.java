@@ -38,35 +38,37 @@ public class Client {
         ByteArrayOutputStream collector = new ByteArrayOutputStream();
 
         int     expectedBlock   = 1;
-        byte[]  block           = new byte[131];
-        boolean complete        = false;
+        byte[]  block           = new byte[128];
         int     marker;
         int     retries         = RETRIES;
-        
+
         output.write(NAK);
 
         while ((marker = input.read()) != EOT) {
 
             if (marker != SOH) error("was expecting SOH");
 
-            if (input.read(block) != 131) {
-                error("was expecting block to be 131 bytes");
-            }
-            
-            if (block[0] != expectedBlock) {
+            if (input.read() != expectedBlock) {
                 error("was expecting block " + expectedBlock);
             }
-            
-            if (block[0] + block[1] != 255) {
+
+            if (expectedBlock + input.read() != 255) {
                 error("block check doesn't add up");
             }
 
-            int checksum = 0;
-            for (int i = 2; i < 130; i++) {
-                checksum += block[i];
+            int sum = 0;
+            int len = 0;
+            for (int i = 0; i < block.length; i++) {
+                block[i] = (byte) input.read();
+                sum += block[i];
+                if (block[i] != padding) {
+                     len++;
+                }
             }
 
-            if (checksum % 255 != block[130]) {
+            int checksum = input.read();
+
+            if (sum % 256 != checksum) {
                 retries--;
                 if (retries > 0) {
                     output.write(NAK);
@@ -76,16 +78,11 @@ public class Client {
                 }
             }
 
-            int peek = 2;
-            int len  = 0;
-            
-            while (len <= 128 && block[peek++] != padding) len++;
-
-            collector.write(block, 2, len);
+            collector.write(block, 0, len);
 
             retries = RETRIES;
             output.write(ACK);
-            
+
             expectedBlock++;
 
         }
